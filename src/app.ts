@@ -7,9 +7,18 @@ import {
   AuthenticationDetails,
   IAuthenticationDetailsData,
   ICognitoUserPoolData,
+  CognitoUserSession,
+  ICognitoUserData,
 } from "amazon-cognito-identity-js";
 
-import * as AWS from "aws-sdk/global";
+enum Action {
+  REGISTER_USER = 1,
+  CONFIRM_REGISTRATION,
+  RESEND_CONFIRMATION,
+  AUTHENTICATE,
+  DELETE,
+  EXIT,
+}
 
 import readline from "readline";
 
@@ -18,13 +27,27 @@ const iReadline = readline.createInterface({
   output: process.stdout,
 });
 
-const {
-  APP_CLIENT_ID,
-  POOL_ID,
-  POOL_REGION,
-} = process.env;
+class Menu {
+  private menu: string = "";
 
-const pool_data: ICognitoUserPoolData  = {
+  static init() {
+    return new Menu();
+  }
+
+  addMenuItem(item: [number, string]): Menu {
+    const [key, value] = item;
+    this.menu = `${this.menu}${key}) ${value}\n`;
+    return this;
+  }
+
+  get menu_list() {
+    return `${this.menu}>`;
+  }
+}
+
+const { APP_CLIENT_ID, POOL_ID } = process.env;
+
+const pool_data: ICognitoUserPoolData = {
   UserPoolId: POOL_ID || "",
   ClientId: APP_CLIENT_ID || "",
 };
@@ -55,20 +78,39 @@ const userAttributeFactory = function (
   });
 };
 
-const cognitoUserFactory = function (
-  username: string,
-  user_pool: CognitoUserPool
-): CognitoUser {
-  const user_data = {
-    Username: username,
-    Pool: user_pool,
-  };
-  const cognito_user = new CognitoUser(user_data);
-  return cognito_user;
-};
+class CognitoUserFactory {
+  private static instance: CognitoUserFactory;
+  private cognito_user: CognitoUser;
+
+  private constructor(user_data: ICognitoUserData) {
+    this.cognito_user = new CognitoUser(user_data);
+  }
+
+  get cognito_user_instance() {
+    return this.cognito_user;
+  }
+
+  static init(email: string, user_pool: CognitoUserPool) {
+    if (!CognitoUserFactory.instance) {
+      const user_data = {
+        Username: email,
+        Pool: user_pool,
+      };
+      this.instance = new CognitoUserFactory(user_data);
+    }
+  }
+
+  static getInstance() {
+    if (CognitoUserFactory.instance) {
+      return this.instance;
+    } else {
+      throw { message: "Congnito User instance not found" };
+    }
+  }
+}
 
 const registerUser = (
-  username: string,
+  email: string,
   password: string,
   ...attributes: [string, string][]
 ): Promise<CognitoUser> => {
@@ -77,7 +119,7 @@ const registerUser = (
       userAttributeFactory(key, value)
     );
 
-    user_pool.signUp(username, password, attribute_list, [], (err, result) => {
+    user_pool.signUp(email, password, attribute_list, [], (err, result) => {
       if (err) reject(err);
       else resolve(result?.user);
     });
@@ -85,11 +127,10 @@ const registerUser = (
 };
 
 const confirmRegistration = (
-  email: string,
   confirm_code: string
 ): Promise<string> => {
   return new Promise((resolve, reject) => {
-    const cognito_user = cognitoUserFactory(email, user_pool);
+    const cognito_user = CognitoUserFactory.getInstance().cognito_user_instance;
     cognito_user.confirmRegistration(confirm_code, true, (err, result) => {
       if (err) reject(err);
       else resolve(result);
@@ -97,9 +138,9 @@ const confirmRegistration = (
   });
 };
 
-const resendConfirmation = (username: string): Promise<any> => {
+const resendConfirmation = (): Promise<any> => {
   return new Promise((resolve, reject) => {
-    const cognito_user = cognitoUserFactory(username, user_pool);
+    const cognito_user = CognitoUserFactory.getInstance().cognito_user_instance;
     cognito_user.resendConfirmationCode((err, result) => {
       if (err) reject(err);
       else resolve(result);
@@ -107,9 +148,9 @@ const resendConfirmation = (username: string): Promise<any> => {
   });
 };
 
-const deleteUser = (email: string): Promise<string> => {
+const deleteUser = (): Promise<string> => {
   return new Promise((resolve, reject) => {
-    const cognito_user = cognitoUserFactory(email, user_pool);
+    const cognito_user = CognitoUserFactory.getInstance().cognito_user_instance;
     cognito_user.deleteUser((err, result) => {
       if (err) reject(err);
       else resolve(result);
@@ -129,7 +170,7 @@ const authenticateuser = (
     const authentication_details = new AuthenticationDetails(
       authentication_data
     );
-    const cognito_user = cognitoUserFactory(email, user_pool);
+    const cognito_user = CognitoUserFactory.getInstance().cognito_user_instance;
     cognito_user.authenticateUser(authentication_details, {
       onSuccess: (result) => {
         const user_credentials: UserCredentials = {
@@ -145,43 +186,55 @@ const authenticateuser = (
 };
 
 const run = async function () {
-  try {
-    if (process.argv.includes("register")) {
-      const name = await console_input("Full Name:");
-      const preferred_username = await console_input("Username:");
-      const email = await console_input("Email:");
-      const password = await console_input("Password:");
-      const result = await registerUser(
-        email,
-        password,
-        ["name", name],
-        ["preferred_username", preferred_username]
-      );
-      console.log("User created succesfull");
-    } else if (process.argv.includes("confirm")) {
-      const email = await console_input("Email:");
-      const confirm_code = await console_input("Confirmation Code:");
-      const result = await confirmRegistration(email, confirm_code);
-      console.log(result);
-    } else if (process.argv.includes("delete")) {
-      const email = await console_input("Email:");
-      const password = await console_input("Password:");
+  const email = await console_input("Email:");
+  CognitoUserFactory.init(email, user_pool);
 
-      const result = await authenticateuser(email, password);
-      console.log(result);
-    } else {
-      const answer = await console_input("Who are you?");
-      console.log("You are: ", answer);
+  let action = -1;
+  while (action !== Action.EXIT) {
+    const current_action = action
+    action = -1;
+    try {
+      if (current_action === Action.REGISTER_USER) {
+        const name = await console_input("Full Name:");
+        const preferred_username = await console_input("Username:");
+        const password = await console_input("Password:");
+        const result = await registerUser(
+          email,
+          password,
+          ["name", name],
+          ["preferred_username", preferred_username]
+        );
+        console.log(result);
+      } else if (current_action === Action.CONFIRM_REGISTRATION) {
+        const confirm_code = await console_input("Confirmation Code:");
+        const result = await confirmRegistration(confirm_code);
+        console.log(result);
+      } else if (current_action === Action.RESEND_CONFIRMATION) {
+        const result = await resendConfirmation();
+        console.log(result);
+      } else if (current_action === Action.AUTHENTICATE) {
+        const password = await console_input("Password:");
+        const auth_result = await authenticateuser(email, password);
+        console.log(auth_result);
+      } else if (current_action === Action.DELETE) {
+        const delete_result = await deleteUser();
+        console.log(delete_result);
+      } else {
+        let menu = Menu.init()
+          .addMenuItem([Action.REGISTER_USER, "Register"])
+          .addMenuItem([Action.CONFIRM_REGISTRATION, "Confirm Registration"])
+          .addMenuItem([Action.RESEND_CONFIRMATION, "Resend Confirmation"])
+          .addMenuItem([Action.AUTHENTICATE, "Authenticate"])
+          .addMenuItem([Action.DELETE, "Delete Account"])
+          .addMenuItem([Action.EXIT, "Exit"]).menu_list;
+        let result = await console_input(menu);
+        action = +result;
+      }
+    } catch (err) {
+      console.log(err);
     }
-    /* const user = await registerUser(); */
-    /* console.log("Registered Successfully: ", user.getUsername()); */
-    /* const result = await confirmRegistratoin() */
-    /* console.log(result) */
-  } catch (err) {
-    console.log(err);
-  } finally {
-    iReadline.close();
   }
+  iReadline.close();
 };
 
 run();
