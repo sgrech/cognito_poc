@@ -4,15 +4,25 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon -r dotenv/config dest/app.js"
+    "start": "nodemon -r dotenv/config dest/app.js",
+    "compile:watch": "tsc -w"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@types/node": "^14.6.4",
     "amazon-cognito-identity-js": "^4.4.0",
-    "aws-sdk": "^2.749.0",
+    "aws-sdk": "^2.750.0",
+    "axios": "^0.20.0",
+    "jsonwebtoken": "^8.5.1",
+    "jwk-to-pem": "^2.0.4",
+    "typescript": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^14.10.1",
+    "@typescript-eslint/eslint-plugin": "^4.1.1",
+    "@typescript-eslint/parser": "^4.1.1",
     "dotenv": "^8.2.0",
+    "eslint": "^7.9.0",
     "nodemon": "^2.0.4"
   }
 }
