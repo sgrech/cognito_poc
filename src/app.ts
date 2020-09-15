@@ -14,13 +14,14 @@ const {
   AWS_REGION: aws_region = "",
 } = process.env;
 
-/* const tokens: string[] = [] */
+let refresh_token: string;
+let access_token: string;
+let id_token: string;
 
 const run = async function () {
   const read_line = ReadlineFactory.getInstance();
-  /* const email = await read_line.readQuestion("Email:"); */
   const cognitoAdmin = new CognitoAdminModel(pool_id, app_client_id);
-  /* const cognito = new CognitoModel(email, pool_id, app_client_id); */
+  const jwt = await Jwt.initialize(aws_region, pool_id);
 
   let action = -1;
   while (action !== Actions.EXIT) {
@@ -67,17 +68,34 @@ const run = async function () {
             ...required_responses
           );
         }
-        /* const { AuthenticationResult: {AccessToken, IdToken, RefreshToken } } = result */
-        /* tokens.push(RefreshToken, IdToken, AccessToken) */
-      } else if (current_action === Actions.GET_JWT) {
-        const result = await Jwt.getJwks(aws_region, pool_id);
-        console.log(result.data);
+        const { AuthenticationResult } = result;
+
+        if (AuthenticationResult?.RefreshToken) {
+          refresh_token = AuthenticationResult.RefreshToken;
+        }
+        if (AuthenticationResult?.IdToken) {
+          id_token = AuthenticationResult.IdToken;
+        }
+        if (AuthenticationResult?.AccessToken) {
+          access_token = AuthenticationResult.AccessToken;
+        }
+      } else if (current_action === Actions.DECODE_ACCESS_TOKEN) {
+        const token = jwt.decodeAccessToken(access_token);
+        const is_valid = await jwt.verifyToken(access_token, token);
+        console.log(is_valid);
+        console.log(token);
+      } else if (current_action === Actions.DECODE_ID_TOKEN) {
+        const token = jwt.decodeIdToken(id_token);
+        const is_valid = await jwt.verifyToken(id_token, token);
+        console.log(is_valid);
+        console.log(token);
       } else {
         const menu = Menu.init()
           .addMenuItem([Actions.CREATE_USER, "Create user"])
           .addMenuItem([Actions.DELETE_USER, "Delete user"])
           .addMenuItem([Actions.AUTH_USER, "Auth user"])
-          .addMenuItem([Actions.GET_JWT, "Get JWT"])
+          .addMenuItem([Actions.DECODE_ACCESS_TOKEN, "Decode Access Token"])
+          .addMenuItem([Actions.DECODE_ID_TOKEN, "Decode Id Token"])
           .addMenuItem([Actions.EXIT, "Exit"]).menu_list;
         const result = await read_line.readQuestion(menu);
         action = +result;

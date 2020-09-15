@@ -45,6 +45,7 @@ export enum Actions {
   DELETE_USER,
   AUTH_USER,
   AUTH_NEW_PASSWORD,
-  GET_JWT,
+  DECODE_ACCESS_TOKEN,
+  DECODE_ID_TOKEN,
   EXIT,
 }
