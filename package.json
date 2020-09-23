@@ -4,12 +4,14 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon -r dotenv/config dest/app.js",
+    "start": "node -r dotenv/config dest/app.js",
+    "start:dev": "nodemon -r dotenv/config dest/app.js",
     "compile:watch": "tsc -w"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@types/aws-sdk": "^2.7.0",
     "amazon-cognito-identity-js": "^4.4.0",
     "aws-sdk": "^2.750.0",
     "axios": "^0.20.0",

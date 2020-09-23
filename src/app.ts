@@ -18,6 +18,13 @@ let refresh_token: string;
 let access_token: string;
 let id_token: string;
 
+const clearScreen = () => {
+  const lines = process.stdout.getWindowSize()[1];
+  for (let i = 0; i < lines; i++) {
+    console.log("\r\n");
+  }
+};
+
 const run = async function () {
   const read_line = ReadlineFactory.getInstance();
   const cognitoAdmin = new CognitoAdminModel(pool_id, app_client_id);
@@ -27,6 +34,7 @@ const run = async function () {
   while (action !== Actions.EXIT) {
     const current_action = action;
     action = -1;
+    // clearScreen();
     try {
       if (current_action === Actions.CREATE_USER) {
         const name = await read_line.readQuestion("Full Name:");
